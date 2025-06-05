@@ -1,0 +1,113 @@
+# Product Plan: AI Research Assistant
+
+**Product Vision:** To provide users with a powerful yet simple tool to conduct in-depth research on any subject, leveraging AI to generate comprehensive reports and delivering them in a convenient PDF format.
+
+---
+
+## 1. Core Features
+
+* **Prompt-based Research:** Users can input a natural language prompt detailing the subject they want to research.
+* **AI-Powered Deep Research:** An AI agent will perform the research using a selected LLM (starting with Gemini).
+* **Configurable LLM Options:** Users will eventually be able to choose from a list of supported LLMs (e.g., Gemini, ChatGPT, Claude).
+* **Report Generation:** The AI agent will compile the research findings into a structured document.
+* **PDF Conversion & Download:** The generated report will be converted into a PDF file that users can download.
+* **User Authentication:** Secure user accounts to manage research history and preferences.
+* **Research History:** Users can view their past research requests and download previously generated PDFs.
+* **Responsive Design:** The web application will be accessible and usable across various devices (desktops, tablets, mobiles).
+
+---
+
+## 2. System Architecture
+
+The application will consist of three main components: a **Client (Frontend)**, a **Server (Backend)**, and an **AI Agent**.
+
+### 2.1. Client (Frontend)
+
+* **Technology:** React with TypeScript
+* **Architecture:**
+    * **Component-Based UI:** Built using reusable React components for various UI elements (input forms, buttons, progress indicators, results display, user profiles, etc.).
+    * **State Management:** Utilize a robust state management library (e.g., Redux Toolkit, Zustand, or React Context API for simpler cases) to manage application state, user input, API responses, and loading states.
+    * **API Communication:** Use a library like `axios` or the built-in `fetch` API to make asynchronous requests to the backend server.
+    * **Routing:** Implement client-side routing using a library like `React Router` to navigate between different views (e.g., home, research form, history, profile).
+    * **UI/UX:** Focus on a clean, intuitive, and responsive user interface. Provide clear feedback to the user during the research and PDF generation process (e.g., loading spinners, progress bars).
+    * **PDF Handling:** Allow users to initiate downloads of PDF files received from the server.
+
+### 2.2. Server (Backend)
+
+* **Technology:** Node.js with Express.js (TypeScript can also be used here for consistency)
+* **Architecture:**
+    * **RESTful APIs:** Expose well-defined API endpoints for client-server communication.
+        * `POST /api/research`: To submit a new research prompt.
+        * `GET /api/research/{id}/status`: To check the status of a research task.
+        * `GET /api/research/{id}/pdf`: To download the generated PDF.
+        * `GET /api/researches`: To retrieve the user's research history.
+        * `POST /api/auth/register`: For user registration.
+        * `POST /api/auth/login`: For user login.
+    * **Request Handling & Validation:** Validate incoming requests and user input.
+    * **Authentication & Authorization:** Implement JWT (JSON Web Tokens) or a similar mechanism for securing API endpoints and managing user sessions.
+    * **Asynchronous Task Management:** Since LLM research and PDF generation can be time-consuming, implement a robust system for handling these long-running tasks in the background.
+        * **Job Queue:** Use a message queue (e.g., RabbitMQ, Redis with BullMQ, or AWS SQS) to manage research tasks. When a user submits a research request, a job is added to the queue.
+        * **Worker Services:** Separate worker processes will pick up jobs from the queue and interact with the AI Agent. This prevents the main API server from being blocked.
+    * **Database Integration:** Use a database (e.g., PostgreSQL, MongoDB) to store user information, research requests, task statuses, and potentially metadata about the generated reports.
+    * **AI Agent Interaction:** The server will be responsible for invoking the AI Agent with the user's prompt and receiving the research document.
+    * **PDF Generation Service:** Integrate a library for converting the AI agent's output (likely Markdown or structured text) into a PDF.
+        * **Recommended Libraries:** `PDFKit` (for programmatic PDF creation), `Puppeteer` or `Playwright` (for converting HTML/Markdown to PDF via headless browser, offering good fidelity for complex layouts).
+    * **Error Handling & Logging:** Implement comprehensive error handling and logging mechanisms.
+
+### 2.3. AI Agent
+
+* **Purpose:** To autonomously perform in-depth research based on a user's prompt, synthesize the information, and generate a structured report.
+* **Architecture:**
+    * **Modular Design:** The agent should be designed in a modular way to easily swap components or add new functionalities.
+    * **LLM Abstraction Layer:** Create an interface or adapter pattern to interact with different LLMs. This will allow you to switch between Gemini, ChatGPT, Claude, etc., by implementing a specific connector for each LLM provider.
+        * The core logic of the agent calls this abstraction, which then routes the request to the currently configured LLM's SDK or API.
+    * **Core Logic/Orchestrator:** This component receives the research prompt and orchestrates the research process.
+        * **Planning:** (Optional, but highly recommended for "deep research") Break down the complex research prompt into smaller, manageable sub-queries or research steps.
+        * **Tool Use:** Equip the agent with tools to gather information. Initially, this will be interacting with the chosen LLM. In the future, this could be expanded to:
+            * **Web Search APIs:** (e.g., Google Custom Search API, Bing Search API) to fetch real-time information or access sources beyond the LLM's training data.
+            * **Knowledge Base Access:** Connect to internal or external databases/APIs for specialized information.
+        * **Information Synthesis:** Combine information from various steps/sources.
+        * **Report Structuring:** Organize the synthesized information into a coherent document format (e.g., Markdown with clear headings, sections, summaries).
+    * **APIs & Tools (Internal to the Agent):**
+        * LLM API connectors (e.g., Google AI Gemini SDK, OpenAI SDK).
+        * (Future) Web search tool connectors.
+        * (Future) Data parsing and cleaning utilities.
+    * **Recommended Technologies:**
+        * **Primary Language:** Python is highly recommended due to its extensive AI/ML ecosystem, including libraries like LangChain or LlamaIndex, which can significantly simplify agent development, tool integration, and LLM interaction. However, if you prefer to keep the stack consistent, Node.js with libraries like `langchain-js` is also a viable option.
+        * **Frameworks (Optional but helpful):**
+            * **LangChain (Python or JS):** Provides building blocks for creating applications with LLMs, including agent frameworks, tool integrations, and chaining capabilities. This would be highly beneficial for managing the research process, integrating different LLMs, and using tools.
+            * **LlamaIndex (Python):** Focuses on connecting LLMs to external data sources (RAG - Retrieval Augmented Generation), which could be useful if your agent needs to consult specific documents or databases.
+    * **Communication:** The AI Agent will likely expose an internal API (e.g., a simple HTTP endpoint if run as a separate service, or be a library called by the Node.js worker) that the backend server can call.
+
+---
+
+## 3. Workflow Example
+
+1.  **User Input:** The user enters a research prompt (e.g., "The impact of AI on the future of renewable energy") on the React client.
+2.  **API Request:** The client sends a `POST` request to `/api/research` on the Node.js server with the prompt.
+3.  **Task Queuing:** The server validates the request, creates a new research task entry in the database (with a "pending" status), and adds a job to the message queue. It returns a task ID to the client.
+4.  **Client Polling/Notifications:** The client can periodically poll the `/api/research/{taskId}/status` endpoint or use WebSockets (for a more real-time experience) to check the task status.
+5.  **Worker Processing:** A worker service picks up the job from the queue.
+6.  **AI Agent Invocation:** The worker service calls the AI Agent, providing the research prompt and the selected LLM (initially Gemini).
+7.  **AI Research:**
+    * The AI Agent (using LangChain or similar logic) might break down the prompt.
+    * It interacts with the Gemini API (and potentially other tools in the future) to gather information.
+    * It synthesizes the findings into a structured document (e.g., Markdown).
+8.  **Report to Server:** The AI Agent returns the generated document to the worker service.
+9.  **PDF Conversion:** The worker service takes the document and uses a PDF generation library (e.g., Puppeteer to convert Markdown/HTML to PDF) to create the PDF file.
+10. **Store & Update Status:** The PDF is stored (e.g., on a file system or cloud storage like S3), and its path/URL is saved in the database. The task status is updated to "completed."
+11. **User Notification/Download:**
+    * When the client polls and finds the status is "completed," it enables a download button.
+    * Clicking the download button makes a `GET` request to `/api/research/{taskId}/pdf`, which streams the PDF file back to the client.
+
+---
+
+## 4. Future Enhancements
+
+* **Advanced LLM Configuration:** Allow users to specify parameters for the LLM (e.g., creativity level, response length).
+* **Source Citations:** The AI agent could attempt to include sources for the information it gathers.
+* **Interactive Report Elements:** Explore options for more dynamic reports beyond static PDFs.
+* **Team/Collaboration Features:** Allow multiple users to collaborate on research.
+* **Custom Data Sources:** Allow users to upload their own documents for the AI agent to consider during research.
+* **Real-time Progress Updates:** More granular progress updates to the client.
+* **Report Customization:** Allow users to choose report templates or customize sections.
